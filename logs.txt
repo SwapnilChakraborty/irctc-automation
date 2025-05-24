@@ -1,0 +1,45 @@
+
+---
+
+ `logs.txt`
+
+```txt
+# IRCTC Login Automation - Approach Log
+
+## Environment
+- JavaScript (Node.js)
+- Playwright
+- Chrome headless mode (slowMo for visibility)
+- Terminal-based user input for captcha
+
+---
+
+## Phase 1: Planning 
+
+- Reviewed IRCTC login process: discovered captcha, login modal, and session behavior.
+- Analyzed network behavior using browser dev tools.
+- Decided to avoid image OCR captcha solving due to complexity and limited time.
+- Chose Playwright for modern API and headless/stealth capability.
+
+## Phase 2: Development 
+
+- Scripted navigation to https://www.irctc.co.in
+- Handled modal login popup and accepted cookies dialog.
+- Captured captcha as an image and paused for user to input the text manually.
+
+## Phase 3: Session Management 
+
+- Logged in and navigated to Train Search page after successful login.
+- Used `setInterval` with `page.reload()` every 20 seconds to keep the session active.
+- Verified cookies and session tokens via Playwright's context.
+
+## Learnings
+
+- Captchas are a challenge in automation without AI/ML or APIs, fallback was manual intervention.
+- IRCTC login page is modal-based, so a simple redirect isn't possible — had to interact with modal fields.
+- Network analysis showed tokens/cookies change on reload, justifying need to refresh session.
+
+## Final Notes
+
+- The solution maintains MVP expectations within 6-hour deadline.
+- Deliverables include this log, API documentation, and JS code.

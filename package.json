@@ -1,0 +1,17 @@
+{
+  "dependencies": {
+    "playright": "^0.0.22",
+    "playwright": "^1.52.0"
+  },
+  "name": "irctc-automation",
+  "version": "1.0.0",
+  "description": "This project demonstrates automation of the IRCTC login process using Playwright with JavaScript. The goal was to:",
+  "main": "irctc-login.js",
+  "scripts": {
+    "start" : "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
