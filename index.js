@@ -2,96 +2,73 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const readline = require('readline');
 
-// Helper function to prompt user input
-function askQuestion(query) {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  return new Promise(resolve => rl.question(query, ans => {
-    rl.close();
-    resolve(ans);
-  }));
+function askQuestion(prompt) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => rl.question(prompt, ans => { rl.close(); resolve(ans); }));
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: false, slowMo: 100 });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const browser = await chromium.launch({ headless: false, slowMo: 80 });
+  const page = await (await browser.newContext({ viewport: { width:1280, height:800 } })).newPage();
 
   try {
-    console.log("Navigating to IRCTC website...");
-    await page.goto('https://www.irctc.co.in/nget/train-search', { waitUntil: 'domcontentloaded' });
+    console.log("  Opening IRCTC…");
+    await page.goto('https://www.irctc.co.in/nget/train-search', { waitUntil:'domcontentloaded', timeout:60000 });
+    await page.waitForTimeout(2000);
 
-    // Handle cookies popup (if any)
+    // Dismiss cookies
+    try { await page.click('text=OK', { timeout:5000 }); } catch {}
+
+    // Open login modal via JS click
+    console.log(" Opening login modal…");
+    await page.evaluate(() => {
+      document.querySelector('a[aria-label="Click here to Login in application"]')?.click();
+    });
+    await page.waitForSelector('input[placeholder="User Name"]', { timeout:15000 });
+
+    // Fill credentials
+    console.log("  Filling credentials…");
+    await page.fill('input[placeholder="User Name"]', 'Akshatraj07');
+    await page.fill('input[placeholder="Password"]', '@Somu123');
+
+     // Capture CAPTCHA
+    const capPath = 'captcha.png';
+    if (fs.existsSync(capPath)) fs.unlinkSync(capPath);
+
+    console.log(" Capturing CAPTCHA…");
     try {
-      await page.click('text=OK', { timeout: 3000 });
-      console.log("Cookies popup accepted.");
-    } catch {}
-
-    // Click hamburger menu (three horizontal dots) to open the side menu
-    console.log("Opening hamburger menu...");
-    await page.click('button[aria-label="Menu"]');
-    await page.waitForTimeout(1000);  // wait for menu animation
-
-    // Now click the Login button inside the menu
-    console.log("Clicking on LOGIN button inside menu...");
-    await page.click('text=Login');
-    await page.waitForSelector('input[placeholder="User Name"]', { timeout: 10000 });
-
-    // Fill username and password (replace with your credentials)
-    await page.fill('input[placeholder="User Name"]', 'your_username');
-    await page.fill('input[placeholder="Password"]', 'your_password');
-
-    // Remove old captcha.png if exists
-    if (fs.existsSync('captcha.png')) {
-      fs.unlinkSync('captcha.png');
+      const canvas = await page.waitForSelector('canvas', { timeout: 5000 });
+      await canvas.screenshot({ path: capPath });
+      console.log("   Saved canvas captcha.");
+    } catch {
+      const loginForm = await page.waitForSelector('form:has(input[placeholder=\"Enter Captcha\"])', { timeout: 10000 });
+      await loginForm.screenshot({ path: capPath });
+      console.log("   Saved login-form captcha fallback.");
     }
 
-    // Capture captcha image screenshot
-    await page.locator('#captchaImg').screenshot({ path: 'captcha.png' });
-    console.log("Captcha image saved as captcha.png");
+    // Manual CAPTCHA entry
+    console.log(" Open captcha.png and enter the text below:");
+    const code = await askQuestion(" Enter captcha: ");
+    await page.fill('input[placeholder=\"Enter Captcha\"]', code.trim());
 
-    // Prompt user to enter captcha
-    console.log("Please open captcha.png and enter the captcha text below.");
-    const captcha = await askQuestion('Enter captcha from captcha.png: ');
+    // Submit
+    console.log(" Submitting form…");
+    await page.evaluate(() => document.querySelector('button[type="submit"]')?.click());
+    await page.waitForTimeout(7000);
 
-    // Fill captcha field
-    await page.fill('input[placeholder="Enter Captcha"]', captcha.trim());
-
-    // Click submit/login button
-    await page.click('button[type="submit"]');
-
-    // Wait a bit for login to process
-    await page.waitForTimeout(5000);
-
-    // Check if login successful by URL or element on Book Ticket page
-    if (page.url().includes('train-search')) {
-      console.log("Login successful!");
-
-      // Keep session alive by reloading page every 20 seconds for 2 minutes
-      console.log("Keeping session alive for 2 minutes...");
-      const interval = setInterval(async () => {
-        console.log("Refreshing session...");
-        await page.reload();
-      }, 20000);
-
-      setTimeout(async () => {
-        clearInterval(interval);
-        console.log("2 minutes completed. Closing browser...");
-        await browser.close();
-        process.exit(0);
-      }, 120000);
-
+    // Verify login and keep session alive
+    if (page.url().includes('train-search') || await page.$('app-train-list')) {
+      console.log(" Logged in! Refreshing every 20 s for 2 min…");
+      const id = setInterval(() => page.reload({ waitUntil:'domcontentloaded' }), 20000);
+      setTimeout(async () => { clearInterval(id); console.log("⏲ Done."); await browser.close(); }, 120000);
     } else {
-      console.log("Login failed or captcha incorrect.");
+      console.log(" Login failed. Check credentials/captcha.");
       await browser.close();
-      process.exit(1);
     }
 
-  } catch (error) {
-    console.error("Error occurred:", error);
+  } catch (e) {
+    console.error(" Error:", e.message);
+    await page.screenshot({ path:'error.png' });
     await browser.close();
-    process.exit(1);
   }
 })();
