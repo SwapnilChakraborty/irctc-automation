@@ -28,8 +28,8 @@ function askQuestion(prompt) {
 
     // Fill credentials
     console.log("  Filling credentials…");
-    await page.fill('input[placeholder="User Name"]', 'Akshatraj07');
-    await page.fill('input[placeholder="Password"]', '@Somu123');
+    await page.fill('input[placeholder="User Name"]', 'your Username');
+    await page.fill('input[placeholder="Password"]', 'Your Password');
 
      // Capture CAPTCHA
     const capPath = 'captcha.png';
