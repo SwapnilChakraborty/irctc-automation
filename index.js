@@ -78,9 +78,9 @@ async function humanType(page, selector, text) {
     submitButton.click(),
     page.waitForSelector('xpath=/html/body/app-root/app-home/div[1]/app-header/div[2]/div[2]/div[1]/a[1]', { timeout: 15000 }),
   ]);
-  console.log('✅ Login successful!');
+  console.log(' Login successful!');
   } catch {
-  console.error('❌ Login failed — credentials/captcha or bot-detection.');
+  console.error(' Login failed — credentials/captcha or bot-detection.');
   await page.screenshot({ path: 'login-failed.png' });
   await browser.close();
   return;
@@ -96,37 +96,37 @@ async function humanType(page, selector, text) {
 
 
     // Go to booking page directly
-    console.log('📖 Navigating to Book Ticket page…');
+    console.log(' Navigating to Book Ticket page…');
     await page.goto('https://www.irctc.co.in/nget/train-search', {
       waitUntil: 'domcontentloaded', timeout: 30000
     });
 
-    console.log('🔍 Waiting for booking form…');
+    console.log(' Waiting for booking form…');
    try {
    await page.waitForSelector('input[formcontrolname="stationFrom"], input[placeholder*="From"]', { timeout: 10000 });
-   console.log('🎯 Booking form found!');
+   console.log(' Booking form found!');
    } catch {
-   console.log('⚠️ Booking form inputs not found, waiting for container as fallback...');
+   console.log('Booking form inputs not found, waiting for container as fallback...');
    await page.waitForSelector('xpath=//*[@id="divMain"]/div/app-main-page/div/div/div[1]/div[1]/div[1]', { timeout: 15000 });
-   console.log('🎯 Booking form container found!');
+   console.log('🎯Booking form container found!');
   }
 
 
     // Keep session alive for 2 mins
-    console.log('🔄 Keeping session alive for 2 minutes…');
+    console.log(' Keeping session alive for 2 minutes…');
     const keepAlive = setInterval(async () => {
-      console.log('🔁 Refreshing page to keep session alive…');
+      console.log(' Refreshing page to keep session alive…');
       await page.reload({ waitUntil: 'domcontentloaded' });
     }, 30000); // refresh every 30 sec
 
     setTimeout(async () => {
       clearInterval(keepAlive);
-      console.log('⏱ 2 minutes complete. Closing browser.');
+      console.log('2 minutes complete. Closing browser.');
       await browser.close();
     }, 120000);
 
   } catch (e) {
-    console.error('🚨 Error:', e.message);
+    console.error(' Error:', e.message);
     await page.screenshot({ path: 'error.png' });
     await browser.close();
   }
