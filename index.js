@@ -1,74 +1,111 @@
+// irctc-login-automation.js
 const { chromium } = require('playwright');
 const fs = require('fs');
 const readline = require('readline');
 
-function askQuestion(prompt) {
+function askQuestion(query) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise(resolve => rl.question(prompt, ans => { rl.close(); resolve(ans); }));
+  return new Promise(resolve => rl.question(query, ans => {
+    rl.close();
+    resolve(ans.trim());
+  }));
+}
+
+async function humanType(page, selector, text) {
+  for (const char of text) {
+    await page.type(selector, char);
+    await page.waitForTimeout(100 + Math.random() * 100);
+  }
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: false, slowMo: 80 });
-  const page = await (await browser.newContext({ viewport: { width:1280, height:800 } })).newPage();
+  const username = await askQuestion('Username: ');
+  const password = await askQuestion('Password: ');
+
+  const browser = await chromium.launch({ headless: false, slowMo: 50 });
+  const context = await browser.newContext({
+    viewport: { width: 1366, height: 768 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36',
+  });
+
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+  });
+
+  const page = await context.newPage();
 
   try {
-    console.log("  Opening IRCTC…");
-    await page.goto('https://www.irctc.co.in/nget/train-search', { waitUntil:'domcontentloaded', timeout:60000 });
-    await page.waitForTimeout(2000);
+    console.log('🔹 Opening IRCTC site...');
+    await page.goto('https://www.irctc.co.in/nget/train-search', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.locator('button:has-text("OK")').click().catch(() => {});
 
-    // Dismiss cookies
-    try { await page.click('text=OK', { timeout:5000 }); } catch {}
+    console.log('🔹 Opening login dialog...');
+    await page.locator('a[aria-label="Click here to Login in application"]').click();
+    await page.locator('input[placeholder="User Name"]').waitFor({ state: 'visible', timeout: 15000 });
 
-    // Open login modal via JS click
-    console.log(" Opening login modal…");
-    await page.evaluate(() => {
-      document.querySelector('a[aria-label="Click here to Login in application"]')?.click();
-    });
-    await page.waitForSelector('input[placeholder="User Name"]', { timeout:15000 });
+    console.log('🔐 Typing username and password...');
+    await humanType(page, 'input[placeholder="User Name"]', username);
+    await humanType(page, 'input[placeholder="Password"]', password);
 
-    // Fill credentials
-    console.log("  Filling credentials…");
-    await page.fill('input[placeholder="User Name"]', 'your Username');
-    await page.fill('input[placeholder="Password"]', 'Your Password');
+    console.log('📸 Capturing CAPTCHA...');
+    const captchaPath = 'captcha.png';
+    if (fs.existsSync(captchaPath)) fs.unlinkSync(captchaPath);
 
-     // Capture CAPTCHA
-    const capPath = 'captcha.png';
-    if (fs.existsSync(capPath)) fs.unlinkSync(capPath);
-
-    console.log(" Capturing CAPTCHA…");
+    let captchaElement;
     try {
-      const canvas = await page.waitForSelector('canvas', { timeout: 5000 });
-      await canvas.screenshot({ path: capPath });
-      console.log("   Saved canvas captcha.");
+      captchaElement = await page.locator('canvas').first().waitFor({ timeout: 7000 });
     } catch {
-      const loginForm = await page.waitForSelector('form:has(input[placeholder=\"Enter Captcha\"])', { timeout: 10000 });
-      await loginForm.screenshot({ path: capPath });
-      console.log("   Saved login-form captcha fallback.");
+      captchaElement = await page.locator('form:has(input[placeholder="Enter Captcha"]) img').first().waitFor({ timeout: 7000 });
     }
 
-    // Manual CAPTCHA entry
-    console.log(" Open captcha.png and enter the text below:");
-    const code = await askQuestion(" Enter captcha: ");
-    await page.fill('input[placeholder=\"Enter Captcha\"]', code.trim());
-
-    // Submit
-    console.log(" Submitting form…");
-    await page.evaluate(() => document.querySelector('button[type="submit"]')?.click());
-    await page.waitForTimeout(7000);
-
-    // Verify login and keep session alive
-    if (page.url().includes('train-search') || await page.$('app-train-list')) {
-      console.log(" Logged in! Refreshing every 20 s for 2 min…");
-      const id = setInterval(() => page.reload({ waitUntil:'domcontentloaded' }), 20000);
-      setTimeout(async () => { clearInterval(id); console.log("⏲ Done."); await browser.close(); }, 120000);
+    if (captchaElement) {
+      await captchaElement.screenshot({ path: captchaPath });
     } else {
-      console.log(" Login failed. Check credentials/captcha.");
-      await browser.close();
+      console.warn('⚠️ CAPTCHA element not found, taking broader screenshot.');
+      await page.screenshot({ path: captchaPath, fullPage: false });
     }
 
-  } catch (e) {
-    console.error(" Error:", e.message);
-    await page.screenshot({ path:'error.png' });
+    console.log('🔑 Please open "captcha.png" and enter CAPTCHA:');
+    const captchaInput = await askQuestion('CAPTCHA: ');
+    await page.locator('input[placeholder="Enter Captcha"]').fill(captchaInput);
+
+    console.log('🔁 Submitting login...');
+    const loginBtn = page.locator('button.search_btn').filter({ hasText: 'LOGIN' });
+    // Ensure button is visible and enabled
+    await loginBtn.waitFor({ state: 'visible', timeout: 15000 });
+    await loginBtn.scrollIntoViewIfNeeded();
+    // Click normally, as per locator pattern in your example
+    await loginBtn.click();
+
+    await Promise.race([
+      page.waitForNavigation({ waitUntil: 'networkidle' }),
+      page.locator('text=Logout').waitFor({ timeout: 20000 })
+    ]);
+
+    console.log('✅ Login successful!');
+
+    console.log('📖 Navigating to Book Ticket page...');
+    await page.goto('https://www.irctc.co.in/nget/train-search', { waitUntil: 'domcontentloaded' });
+    await page.locator('input[formcontrolname="fromStation"]').waitFor({ state: 'visible', timeout: 7000 });
+    console.log('🎯 Booking form loaded.');
+
+    console.log('🕒 Keeping session active for 2 minutes...');
+    const interval = setInterval(async () => {
+      console.log('🔄 Refreshing session...');
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    }, 20000);
+
+    setTimeout(async () => {
+      clearInterval(interval);
+      console.log('⏳ 2 minutes elapsed. Closing browser.');
+      await browser.close();
+    }, 120000);
+
+  } catch (err) {
+    console.error('❗ Error encountered:', err);
+    await page.screenshot({ path: 'error.png', fullPage: true });
     await browser.close();
   }
 })();
